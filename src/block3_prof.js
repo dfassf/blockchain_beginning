@@ -95,12 +95,58 @@ function addBlock(data){
 // 1. type 검사: object/string/number
 
 function ifValidNewBlock(currentBlock, previousBlock){
-    isValidType(currentBlock)
+    if(!isValidType(currentBlock)){
+        console.log(`invalid structure ${JSON.stringify(currentBlock)}`)
+        return false
+    }
+    //if index is valid
+    if(previousBlock.header.index+1 !== currentBlock.header.index){
+        console.log('invalid index')
+        return false
+    }
+    //previousHash check(***IMPORTANT***)
+    /*  어떻게 만들어졌냐
+        해당 블록의 header의 내용 합쳐서 sha256으로 암호화
+        제네시스블록 기준 두번째 블록
+
+    */
+    if(createHash(previousBlock) !== currentBlock.header.previousHash){
+        console.log('invalid previousBlock')
+        return false
+    }
+
+    // body check
+    // currentBlock.body => merkleTree root => result !== currentBlock.header.merkleRoot
+    // body!==empty i.e  currentBlock.body.length !==0 && current.body.merkleRoot!== current.header.merkleRoot
+    
+    if(currentBlock.body.length===0){
+        return false
+    }
+
+    if(merkle("sha256").sync(currentBlock.body).root !== currentBlock.header.merkleRoot){
+        return false
+    }
+    
+    
+    if(!(currentBlock.body.length!==0 || 
+        (merkle("sha256").sync(currentBlock.body).root === currentBlock.header.merkleRoot))
+    ){
+        console.log('노노노노')
+        // return false
+    }else{console.log('예스')}
     return true
 }
 
 function isValidType(block){
-    console.log(block)
+
+    return(
+        typeof(block.header.version)==="string" &&
+        typeof(block.header.index)==="number" &&
+        typeof(block.header.previousHash)==="string" &&
+        typeof(block.header.time)==="number" &&
+        typeof(block.header.merkleRoot)==="string" &&
+        typeof(block.body )==="object" 
+    )
 }
 
 function getVersion(){
@@ -117,4 +163,33 @@ function getCurrentTime(){
 addBlock(['hello1'])
 addBlock(['hello2'])
 addBlock(['hello3'])
-// console.log(Blocks)
+
+
+/*
+
+제네시스 블럭이 유효한지, 데이터가 바뀐 적이 없는지
+block 모든 배열 검사
+
+*/
+
+function isValidBlock(Blocks){
+    if(JSON.stringify(Blocks[0])!==
+        JSON.stringify(createGenesisBlock())){ //객체로 뜨고 false로 뜰거기 때문에 string으로
+        console.log('genesis block error')
+        return false
+    }
+
+    let tempBlocks = [Blocks[0]]
+    for(let i=1; i<Blocks.length; i++){
+        if(isValidNewBlock(Blocks[i],Blocks[i-1])){
+            tempBlocks.push(Blocks[i])
+        }
+    }
+}
+
+module.exports = {
+    getBlocks,
+    getLastBlock,
+    addBlock,
+    getVersion
+}

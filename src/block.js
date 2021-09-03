@@ -2,122 +2,163 @@ const fs = require('fs')
 const merkle = require('merkle')
 const CryptoJs = require('crypto-js')
 
-
-class BlockHeader{
-    constructor(version, index, previousHash, time, merkleRoot){
-        this.version = version
-        this.index = index
-        this.previousHash = previousHash // 마지막 block 가져와서 header를 읽은 다음 string으로 읽은 다음
-                                         // sha256으로 변환할 수 있어야 함
+class BlockHeader { 
+    constructor(version ,index ,previousHash, time, merkleRoot){
+        this.version = version 
+        this.index = index  
+        this.previousHash = previousHash 
         this.time = time
-        this.merkleRoot = merkleRoot
+        this.merkleRoot = merkleRoot 
     }
 }
 
-class Block{
+class Block {
     constructor(header,body){
         this.header = header
         this.body = body
     }
 }
 
+let Blocks = [createGenesisBlock()] 
+
+function getBlocks(){
+    return Blocks
+}
+
+function getLastBlock() {
+   return Blocks[Blocks.length - 1]
+}
+
 function createGenesisBlock(){
-    //1. header 만들기: 5개 인자 필요
-    const version = getVersion() // 1.0.0
+    const version = getVersion() 
     const index = 0
-    const time = getCurrentTime()
+    const time = getCurrentTime() 
     const previousHash = '0'.repeat(64)
     const body = ['hello block']
 
     const tree = merkle('sha256').sync(body)
     const root = tree.root() || '0'.repeat(64)
-    
-    const header = new BlockHeader(version, index, previousHash, time, root)
-    
+
+    const header = new BlockHeader(version,index,previousHash,time,root)
     return new Block(header,body)
-    
-    // const merkleRoot =        //바디 내용 필요
 }
 
-let Blocks =[createGenesisBlock()]
-
-function getPreviousHash(){
-    const newVersion = getLastBlock().header.version
-    const newIndex = getLastBlock().header.index.toString()
-    const newPreviousHash = getLastBlock().header.previousHash
-    const newTime = getLastBlock().header.time.toString()
-    const newRoot = getLastBlock().header.merkleRoot
-    const result = newVersion+newIndex+newPreviousHash+newTime+newRoot
-    console.log(newPreviousHash,'뉴덱')
-    return result.toString()
-}
-
-
-function addBlock(){
-    //헤더 다 스트링으로 순서대로 연결->sha256
-    const version = getVersion() // 1.0.0
-    const index = getLastBlock().header.index+1
+function nextBlock(data){
+    const prevBlock = getLastBlock()
+    const version = getVersion()
+    const index = prevBlock.header.index + 1 
+    const previousHash = createHash(prevBlock) 
     const time = getCurrentTime()
-    const previousHash = getPreviousHash()
-    const body = [`hello block${index+1}`]
 
-    const tree = merkle('sha256').sync(body)
-    const root = tree.root() || '0'.repeat(64)
+    const merkleTree = merkle("sha256").sync(data)
+    const merkleRoot = merkleTree.root() || '0'.repeat(64)
+
+    const header = new BlockHeader(version,index,previousHash,time,merkleRoot) 
+    return new Block(header,data)
+}
+
+function createHash(block){
+    const{
+        version,
+        index,
+        previousHash,
+        time,
+        merkleRoot
+    } = block.header
+    const blockString = version+index+previousHash+time+merkleRoot
+    const Hash = CryptoJs.SHA256(blockString).toString()
+    return Hash
+}
+
+function addBlock(data){
+
+    const newBlock = nextBlock(data)
+    if(ifValidNewBlock(newBlock, getLastBlock())){ 
+
+        Blocks.push(newBlock) 
+    return true
+    }
+    return false
+}
+
+function ifValidNewBlock(currentBlock, previousBlock){
+    if(!isValidType(currentBlock)){
+        console.log(`invalid structure ${JSON.stringify(currentBlock)}`)
+        return false
+    }
+
+    if(previousBlock.header.index+1 !== currentBlock.header.index){
+        console.log('invalid index')
+        return false
+    }
+
+    if(createHash(previousBlock) !== currentBlock.header.previousHash){
+        console.log('invalid previousBlock')
+        return false
+    }
     
-    const header = new BlockHeader(version, index, previousHash, time, root)
+    if(currentBlock.body.length===0){
+        return false
+    }
 
-    return new Block(header,body)
+    if(merkle("sha256").sync(currentBlock.body).root !== currentBlock.header.merkleRoot){
+        return false
+    }
+    
+    
+    if(!(currentBlock.body.length!==0 || 
+        (merkle("sha256").sync(currentBlock.body).root === currentBlock.header.merkleRoot))
+    ){
+        return false
+    }
+    return true
 }
 
-function getBlock(){
-    return Blocks
+function isValidType(block){
+
+    return(
+        typeof(block.header.version)==="string" &&
+        typeof(block.header.index)==="number" &&
+        typeof(block.header.previousHash)==="string" &&
+        typeof(block.header.time)==="number" &&
+        typeof(block.header.merkleRoot)==="string" &&
+        typeof(block.body )==="object" 
+    )
 }
-
-//마지막 블럭 가져오기
-function getLastBlock(){
-    return Blocks[Blocks.length-1]
-}
-
-function pushBlock(){
-    Blocks.push(addBlock())
-}
-
-pushBlock()
-pushBlock()
-pushBlock()
-// console.log(Blocks)
-
-
-
-
-// const blockchain = new Block(new BlockHeader(1,2,3,4,5),['hello'])
-// console.log(blockchain)
-
-// const header = new BlockHeader(1,2,3,4,5)
-// const header2 = new BlockHeader(2,3,4,5,6)
-
-// console.log(header)
-// console.log(header2)
-
-// 사용법
-// const tree = merkle('sha256').sync([]) //tree구조
-// tree.root()
 
 function getVersion(){
-    // 어떤 파일 읽을거냐
-    const package = fs.readFileSync("../package.json")
-    // console.log(JSON.parse(package).version) //toString하지 않아도 변환됨
-    // const {package} = JSON.parse(fs.readFileSync("../package.json"))
-    return JSON.parse(package).version
+    const {version} = JSON.parse(fs.readFileSync("../package.json"))
+    return version
 }
 
 function getCurrentTime(){
-    return Math.ceil(new Date().getTime())
+    return Math.ceil(new Date().getTime()/1000) 
 }
 
+addBlock(['hello1'])
+addBlock(['hello2'])
+addBlock(['hello3'])
 
+function isValidBlock(Blocks){
+    if(JSON.stringify(Blocks[0])!==
+        JSON.stringify(createGenesisBlock())){
+        console.log('genesis block error')
+        return false
+    }
 
+    let tempBlocks = [Blocks[0]]
+    for(let i=1; i<Blocks.length; i++){
+        if(isValidNewBlock(Blocks[i],Blocks[i-1])){
+            tempBlocks.push(Blocks[i])
+        }
+    }
+}
 
-getVersion()
-getCurrentTime()
+console.log(Blocks)
 
+module.exports = {
+    getBlocks,
+    getLastBlock,
+    addBlock,
+    getVersion
+}
